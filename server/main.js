@@ -16,6 +16,7 @@ var events = require("./runtime/events").create();
 const FUXA = require('./fuxa.js');
 const runtime = require('./runtime');
 const authJwt = require('./api/jwt-helper');
+const externalAuth = require('./api/external-auth');
 
 const BASE_PATH = (process.env.BASE_PATH || '').replace(/\/+$/, '');
 
@@ -205,6 +206,9 @@ try {
         if (mysettings.nodeRedEnabled === true && utils.isNullOrUndefined(mysettings.nodeRedAuthMode)) {
             settings.nodeRedAuthMode = 'legacy-open';
         }
+        if (mysettings.externalAuth) {
+            settings.externalAuth = Object.assign({}, settings.externalAuth || {}, mysettings.externalAuth);
+        }
     }
 } catch (err) {
     logger.error('Error loading user settings file: ' + userSettingsFile)
@@ -282,6 +286,24 @@ const io = socketIO(server, {
     },
     path: BASE_PATH + '/socket.io',
 });
+
+// With external authentication, verify the token (cookie/header) on socket handshake
+if (settings.secureEnabled && settings.externalAuth?.enabled) {
+    io.use(async (socket, next) => {
+        try {
+            const token = externalAuth.cookieToken(socket.handshake, settings.externalAuth.cookieName)
+                || socket.handshake.query?.token;
+            if (!token) {
+                return next(new Error('unauthorized'));
+            }
+            await externalAuth.verifyExternalToken(settings, token);
+            return next();
+        } catch (err) {
+            logger.warn(`socket handshake unauthorized: ${err}`);
+            return next(new Error('unauthorized'));
+        }
+    });
+}
 
 // Check settings value
 var www = path.resolve(__dirname, '../client/dist');
@@ -388,7 +410,7 @@ const allowCrossDomain = function (req, res, next) {
     if (isOriginAllowed(origin)) {
         res.header('Access-Control-Allow-Origin', origin || '*');
 
-        if (settings.enableRefreshCookieAuth || settings.nodeRedEnabled) {
+        if (settings.enableRefreshCookieAuth || settings.nodeRedEnabled || settings.externalAuth?.enabled) {
             res.header('Access-Control-Allow-Credentials', 'true');
         }
     }
@@ -418,9 +440,25 @@ function getCookieValue(req, name) {
     return null;
 }
 
-function snapshotAuth(req, res, next) {
+async function snapshotAuth(req, res, next) {
     if (!settings.secureEnabled) {
         return next();
+    }
+
+    // With external authentication, the token comes from the shared cookie
+    if (settings.externalAuth?.enabled) {
+        const extToken = externalAuth.cookieToken(req, settings.externalAuth.cookieName)
+            || req.query?.token || req.headers['x-access-token'];
+        if (!extToken || extToken === 'null') {
+            return res.status(401).end();
+        }
+        try {
+            await externalAuth.verifyExternalToken(settings, extToken);
+            res.header('Cache-Control', 'no-store');
+            return next();
+        } catch (err) {
+            return res.status(401).end();
+        }
     }
 
     const token = req.query?.token || req.headers['x-access-token'] || getCookieValue(req, 'fuxa_access');

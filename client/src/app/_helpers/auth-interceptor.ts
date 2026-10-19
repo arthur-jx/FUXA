@@ -48,9 +48,13 @@ export class AuthInterceptor implements HttpInterceptor {
             }, (err: any) => {
                 if (err instanceof HttpErrorResponse) {
                     if (!skipError && (err.status === 401 || err.status === 403)) {
-                        authService.signOut();
-                        const projectService = this.injector.get(ProjectService);
-                        projectService.reload();
+                        if (authService.isExternalAuth()) {
+                            // External authentication: do nothing, let backend 401 propagate
+                        } else {
+                            authService.signOut();
+                            const projectService = this.injector.get(ProjectService);
+                            projectService.reload();
+                        }
                     }
                 }
             }

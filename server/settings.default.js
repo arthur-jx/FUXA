@@ -81,7 +81,7 @@ module.exports = {
     // Please use exact origin urls for better and safe CORS (Wild Cards not Recommended)
     // "allowedOrigins": ["https://example.com", "https://dashboard.example.com"]
     // Default: ["http://localhost", "http://127.0.0.1", "http://192.168.*", "http://10.*"]
-    "allowedOrigins": ["http://localhost", "http://127.0.0.1", "http://192.168.*", "http://10.*", "http://localhost:4200"],
+    "allowedOrigins": ["http://localhost:*", "http://127.0.0.1:*", "http://192.168.*", "http://10.*"],
 
 
     // The maximum size of HTTP request that will be accepted by the runtime api.
@@ -117,6 +117,31 @@ module.exports = {
     //tokenExpiresIn: '1h',  // '1h'=1hour, 60=60seconds, '1d'=1day
     //enableRefreshCookieAuth: false, // if true, use refresh token HttpOnly cookie flow
     //refreshTokenExpiresIn: '7d' // '7d'=7days, 12h=12hours, 3600=3600seconds
+
+    // External authentication (SSO): verify the token of an external system (iframe embedding).
+    // The token is read from a shared cookie (same domain) or from the 'x-access-token' header
+    // and verified by calling the external system API. Overrides go in 'mysettings.json'.
+    externalAuth: {
+        enabled: false,
+        // Cookie that contains the external system token
+        cookieName: 'access_token',
+        // GET endpoint of the external system that verifies the token and returns the user info
+        verifyUrl: '',
+        // Header used to send the token to the verifyUrl
+        tokenHeader: 'Authorization',
+        // Prefix prepended to the token value
+        tokenPrefix: 'Bearer ',
+        // Field (dot path) of the username in the verify response
+        usernameField: 'username',
+        // Field (dot path) of the roles/groups in the verify response
+        groupsField: 'roles',
+        // Roles that map to the FUXA administrator group
+        adminRoles: ['admin'],
+        // Verification result cache in seconds
+        cacheTtl: 300,
+        // Login page of the external system, {url} is replaced with the current FUXA address
+        loginPageUrl: ''
+    },
 
     // Heartbeat interval in seconds (1-20)
     heartbeatIntervalSec: 10,

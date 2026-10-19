@@ -41,6 +41,22 @@ export class AppSettings {
     nodeRedAuthMode = 'secure';
     /** Enable Swagger */
     swaggerEnabled = false;
+    /** External authentication (SSO) public settings */
+    externalAuth = new ExternalAuthSettings();
+}
+
+export class ExternalAuthSettings {
+    /** External authentication enabled */
+    enabled = false;
+    /** Login page of the external system, {url} is replaced with the current FUXA address */
+    loginPageUrl = '';
+
+    constructor(settings: Partial<ExternalAuthSettings> = null) {
+        if (settings) {
+            this.enabled = !!settings.enabled;
+            this.loginPageUrl = settings.loginPageUrl || '';
+        }
+    }
 }
 
 export class EditorSectionMessagesSettings {

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, firstValueFrom, of } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
 
 import { User, UserGroups } from '../_models/user';
@@ -26,7 +26,8 @@ export class AuthService {
 		let user = JSON.parse(sessionStorage.getItem('currentUser'));
 		if (user) {
 			this.currentUser = user;
-			if (!this.useRefreshCookieAuth && this.isTokenExpired(this.currentUser?.token)) {
+			// Only check the expiry of a real token (external auth synthetic user has token = null)
+			if (!this.useRefreshCookieAuth && this.currentUser?.token && this.isTokenExpired(this.currentUser.token)) {
 				// Token expired: drop stale token to avoid socket auth failures on refresh.
 				if (this.isGuestUser(this.currentUser)) {
 					this.currentUser.token = null;
@@ -112,6 +113,50 @@ export class AuthService {
 
 	getUser(): User {
 		return this.currentUser;
+	}
+
+	/**
+	 * External authentication (SSO) initializer: called by APP_INITIALIZER.
+	 * Verifies the login state with GET /api/auth/check. On failure does nothing —
+	 * the backend will return 401 on API calls, leaving the decision (show 401,
+	 * retry, etc.) to the caller.
+	 */
+	async initExternalAuth(): Promise<void> {
+		if (!environment.serverEnabled) {
+			return;
+		}
+		try {
+			await firstValueFrom(this.settings.refreshSettings());
+		} catch (err) {
+			console.error('initExternalAuth settings err: ' + err);
+			return;
+		}
+		if (!this.isExternalAuth()) {
+			return;
+		}
+		const header = new HttpHeaders({ 'Skip-Auth': 'true', 'Skip-Error': 'true' });
+		try {
+			const result = await firstValueFrom(this.http.get<any>(this.endPointConfig + '/api/auth/check', { headers: header }));
+			this.setExternalUser(result);
+		} catch (err) {
+			// Not authenticated: do nothing, let backend 401 propagate
+		}
+	}
+
+	isExternalAuth(): boolean {
+		return !!this.settings.getSettings()?.externalAuth?.enabled;
+	}
+
+	private setExternalUser(result: any) {
+		const user = new UserProfile();
+		user.username = result?.username;
+		user.fullname = result?.username;
+		user.groups = result?.groups;
+		user.token = null;
+		this.currentUser = user;
+		this.saveUserToken(user);
+		this.publishAccessToken(null);
+		this.currentUser$.next(user);
 	}
 
 	getUserProfile(): UserProfile {

@@ -7,7 +7,7 @@ import { environment } from '../../environments/environment';
 import { TranslateService } from '@ngx-translate/core';
 import { EndPointApi } from '../_helpers/endpointapi';
 import { ToastrService } from 'ngx-toastr';
-import { AppSettings, DaqStore, EditorSectionMessagesSettings, SmtpSettings } from '../_models/settings';
+import { AppSettings, DaqStore, EditorSectionMessagesSettings, ExternalAuthSettings, SmtpSettings } from '../_models/settings';
 
 @Injectable({
     providedIn: 'root'
@@ -139,6 +139,11 @@ export class SettingsService {
         }
         if (settings.swaggerEnabled !== this.appSettings.swaggerEnabled) {
             this.appSettings.swaggerEnabled = settings.swaggerEnabled;
+            dirty = true;
+        }
+        if (settings.externalAuth && (settings.externalAuth.enabled !== this.appSettings.externalAuth.enabled ||
+                settings.externalAuth.loginPageUrl !== this.appSettings.externalAuth.loginPageUrl)) {
+            this.appSettings.externalAuth = new ExternalAuthSettings(settings.externalAuth);
             dirty = true;
         }
         if (dirty) {

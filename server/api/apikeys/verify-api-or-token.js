@@ -1,12 +1,18 @@
 'use strict';
 
 const authJwt = require('../jwt-helper');
+const externalAuth = require('../external-auth');
 
 /**
  * Middleware that accepts either JWT (x-access-token) or API key (x-api-key).
+ * API key takes precedence. When externalAuth is enabled, the token is verified
+ * by the external system verification API instead of the local JWT.
  * It is active only when security is enabled.
+ * @param {*} runtime the runtime
+ * @param {*} opts { allowAnon: true } let the request pass without a valid token (only public data)
  */
-module.exports = function verifyApiOrToken(runtime) {
+module.exports = function verifyApiOrToken(runtime, opts) {
+    const allowAnon = !!opts?.allowAnon;
     return async function (req, res, next) {
         if (!runtime?.settings?.secureEnabled) {
             return next();
@@ -40,6 +46,34 @@ module.exports = function verifyApiOrToken(runtime) {
                 return res.status(500).json({ error: 'unexpected_error', message: 'ApiKey validation failed' });
             }
             return res.status(401).json({ error: 'unauthorized_error', message: 'Invalid API Key' });
+        }
+
+        const extAuth = runtime.settings.externalAuth;
+        if (extAuth?.enabled) {
+            const token = externalAuth.cookieToken(req, extAuth.cookieName) || req.headers['x-access-token'];
+            if (!token) {
+                if (allowAnon) {
+                    req.userId = null;
+                    req.userGroups = undefined;
+                    return next();
+                }
+                return res.status(401).json({ error: 'unauthorized_error', message: 'Authentication required!' });
+            }
+            try {
+                const user = await externalAuth.verifyExternalToken(runtime.settings, token);
+                req.userId = user.id;
+                req.userGroups = user.groups;
+                req.isAuthenticated = true;
+                return next();
+            } catch (err) {
+                runtime.logger?.warn(`external auth verify failed: ${err}`);
+                if (allowAnon) {
+                    req.userId = null;
+                    req.userGroups = undefined;
+                    return next();
+                }
+                return res.status(401).json({ error: 'unauthorized_error', message: 'Invalid token!' });
+            }
         }
 
         return authJwt.verifyToken(req, res, next);

@@ -1,6 +1,6 @@
 // the start/root module that tells Angular how to assemble the application.
 
-import { NgModule } from '@angular/core';
+import { APP_INITIALIZER, NgModule } from '@angular/core';
 import { BrowserModule, DomSanitizer } from '@angular/platform-browser';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { HttpClient, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
@@ -258,6 +258,10 @@ export const myCustomTooltipDefaults: MatTooltipDefaultOptions = {
     touchendHideDelay: 500,
 };
 
+export function initExternalAuthFactory(authService: AuthService) {
+    return () => authService.initExternalAuth();
+}
+
 @NgModule({ declarations: [
         HomeComponent,
         EditorComponent,
@@ -513,6 +517,7 @@ export const myCustomTooltipDefaults: MatTooltipDefaultOptions = {
         LanguageService,
         DeviceAdapterService,
         { provide: MAT_TOOLTIP_DEFAULT_OPTIONS, useValue: myCustomTooltipDefaults },
+        { provide: APP_INITIALIZER, multi: true, deps: [AuthService], useFactory: initExternalAuthFactory },
         provideHttpClient(withInterceptorsFromDi())
     ] })
 export class AppModule {

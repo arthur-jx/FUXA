@@ -51,6 +51,8 @@ function init(_server, _runtime) {
             apiApp.use(bodyParser.urlencoded({limit:maxApiRequestSize, extended: true}));
             authJwt.init(runtime.settings.secureEnabled, runtime.settings.secretCode, runtime.settings.tokenExpiresIn);
             const authMiddleware = verifyApiOrToken(runtime);
+            // Same as authMiddleware but let anonymous requests pass (public data only)
+            const authMiddlewareAnon = verifyApiOrToken(runtime, { allowAnon: true });
 
             const authLimiter = rateLimit({
                 windowMs: runtime.settings.authRateLimitWindowMs || 5 * 60 * 1000,
@@ -116,7 +118,7 @@ function init(_server, _runtime) {
             /**
              * GET Server setting data
              */
-            apiApp.get('/api/settings', authMiddleware, function (req, res) {
+            apiApp.get('/api/settings', authMiddlewareAnon, function (req, res) {
                 if (runtime.settings) {
                     const permission = verifyGroups(req);
                     const tosend = authJwt.haveAdminPermission(permission)
@@ -168,6 +170,11 @@ function init(_server, _runtime) {
                             runtime.settings.nodeRedEnabled === false) {
                             req.body.nodeRedAuthMode = 'secure';
                         }
+                        // The client only knows the public externalAuth fields,
+                        // keep the local externalAuth configuration (verifyUrl etc.)
+                        if (runtime.settings.externalAuth) {
+                            req.body.externalAuth = Object.assign({}, runtime.settings.externalAuth, req.body.externalAuth || {});
+                        }
                         fs.writeFileSync(runtime.settings.userSettingsFile, JSON.stringify(req.body, null, 4));
                         mergeUserSettings(req.body);
                         if (prevAuth.secureEnabled !== runtime.settings.secureEnabled ||
@@ -189,6 +196,21 @@ function init(_server, _runtime) {
             });
 
             /**
+             * GET Check if the current request is authenticated.
+             * With externalAuth enabled it verifies the external token (cookie/header).
+             */
+            apiApp.get('/api/auth/check', authMiddleware, function (req, res) {
+                if (!req.isAuthenticated || authJwt.isGuestUser(req.userId, req.userGroups)) {
+                    return res.status(401).json({ error: 'unauthorized_error', message: 'Authentication required!' });
+                }
+                res.json({
+                    authenticated: true,
+                    username: req.userId,
+                    groups: req.userGroups
+                });
+            });
+
+            /**
              * GET Heartbeat to check token
              */
             apiApp.post('/api/heartbeat', authMiddleware, async function (req, res) {
@@ -198,6 +220,13 @@ function init(_server, _runtime) {
                 }
 
                 if (req.body.params) {
+                    // External authenticated users are not managed locally
+                    if (runtime.settings.externalAuth?.enabled) {
+                        if (!req.isAuthenticated) {
+                            return res.status(401).json({ error: 'unauthorized_error', message: 'Unauthorized!' });
+                        }
+                        return res.end();
+                    }
 
                     if (!req.isAuthenticated) {
                         // guest → NON puo rinnovare token
@@ -250,6 +279,11 @@ function getPublicSettings(settings) {
         delete tosend.daqstore.host;
         delete tosend.daqstore.configurationString;
     }
+    // Only public info of the external authentication, no verify url etc.
+    tosend.externalAuth = {
+        enabled: !!settings.externalAuth?.enabled,
+        loginPageUrl: settings.externalAuth?.loginPageUrl || ''
+    };
     return tosend;
 }
 
@@ -363,6 +397,10 @@ function verifyGroups(req) {
     if (runtime.settings && runtime.settings.secureEnabled) {
         if (req.apiKey) {
             return authJwt.adminGroups[0];
+        }
+        // External authenticated users are not in the local user cache
+        if (runtime.settings.externalAuth?.enabled && req.isAuthenticated) {
+            return req.userGroups;
         }
         if (req.tokenExpired) {
             return (runtime.settings.userRole) ? null : 0;

@@ -20,6 +20,11 @@ export class AuthGuard  {
         }
 
     canActivate(next: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<boolean> {
+        if (this.authService.isExternalAuth()) {
+            // External authentication: the login check has been done on startup,
+            // the authorization is enforced by the server (401/403)
+            return of(true);
+        }
         if (!this.projectService.isSecurityEnabled()) {
             return of(true);
         }

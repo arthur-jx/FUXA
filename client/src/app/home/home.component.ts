@@ -61,6 +61,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     homeLink = '';
     showHomeLink = false;
     securityEnabled = false;
+    externalAuthEnabled = false;
     backgroudColor = 'unset';
     title = '';
     alarms = { show: false, count: 0, mode: '' };
@@ -105,6 +106,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
     ngOnInit() {
         try {
+            this.externalAuthEnabled = this.authService.isExternalAuth();
             this.subscriptionLoad = this.projectService.onLoadHmi.subscribe(() => {
                 if (this.projectService.getHmi()) {
                     this.loadHmi();
@@ -125,7 +127,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
                 this.fuxaview.onOpenCard(viewId, null, viewId, viewToOpen.options);
             });
             this.subscriptionWriteUnauthorized = this.hmiService.onWriteUnauthorized.subscribe(() => {
-                if (!this.isLoggedIn()) {
+                if (!this.isLoggedIn() && !this.externalAuthEnabled) {
                     this.onLogin();
                 }
             });
@@ -464,7 +466,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         this.isLoading = false;
         this.securityEnabled = this.projectService.isSecurityEnabled();
-        if (this.securityEnabled && !this.isLoggedIn() && this.hmi.layout.loginonstart) {
+        if (this.securityEnabled && !this.externalAuthEnabled && !this.isLoggedIn() && this.hmi.layout.loginonstart) {
             this.onLogin();
         }
     }

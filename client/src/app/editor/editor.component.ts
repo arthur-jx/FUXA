@@ -5,6 +5,7 @@ import { MatDialog as MatDialog, MatDialogRef as MatDialogRef, MAT_DIALOG_DATA a
 import { MatDrawer } from '@angular/material/sidenav';
 import { Subject, Subscription, switchMap, takeUntil } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
+import { ActivatedRoute } from '@angular/router';
 
 import { ProjectService, SaveMode } from '../_services/project.service';
 import { Hmi, View, GaugeSettings, SelElement, LayoutSettings, ViewType, ISvgElement, GaugeProperty, DocProfile } from '../_models/hmi';
@@ -139,6 +140,7 @@ export class EditorComponent implements OnInit, AfterViewInit, OnDestroy {
         private resolver: ComponentFactoryResolver,
         private resourcesService: ResourcesService,
         private libWidgetsService: LibWidgetsService,
+        private route: ActivatedRoute,
         private settingsService: SettingsService) {
     }
 
@@ -350,7 +352,8 @@ export class EditorComponent implements OnInit, AfterViewInit, OnDestroy {
             this.hmi.views = [];
             this.addView(ProjectService.MainViewName);
         } else {
-            let oldsel = localStorage.getItem('@frango.webeditor.currentview');
+            // URL query param 'name' takes precedence over the last stored selection
+            let oldsel = this.route.snapshot.queryParamMap.get('name') || localStorage.getItem('@frango.webeditor.currentview');
             if (!oldsel && this.hmi.views.length) {
                 oldsel = this.hmi.views[0].name;
             }
